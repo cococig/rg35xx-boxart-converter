@@ -1,6 +1,6 @@
 extern crate image;
 
-use image::{imageops, DynamicImage};
+use image::{imageops, DynamicImage, GenericImageView};
 use std::fs;
 use std::path::Path;
 
@@ -19,16 +19,28 @@ fn process_image(input_path: &Path, output_path: &Path) {
     // 画像を開く
     let image = image::open(input_path).expect("Failed to open image");
 
-    // 指定された幅に合わせてアスペクト比を保ちつつリサイズ
-    let target_width = 340;
-    let aspect_ratio = (image.height() as f64) / (image.width() as f64);
-    let target_height = (target_width as f64 * aspect_ratio) as u32;
+    // アスペクト比を保ちつつ、最大で340x480に収める
+    let max_width = 340;
+    let max_height = 480;
+    let (width, height) = image.dimensions();
+    let mut resized_width = width;
+    let mut resized_height = height;
+
+    if width > max_width {
+        resized_width = max_width;
+        resized_height = (max_width as f64 * (height as f64 / width as f64)) as u32;
+    }
+
+    if resized_height > max_height {
+        resized_width = (max_height as f64 * (width as f64 / height as f64)) as u32;
+        resized_height = max_height;
+    }
 
     // `resize`の返り値をDynamicImage::ImageRgba8にラップ
     let resized_image = DynamicImage::ImageRgba8(imageops::resize(
         &image,
-        target_width,
-        target_height,
+        resized_width,
+        resized_height,
         image::imageops::FilterType::Nearest,
     ));
 
@@ -38,10 +50,10 @@ fn process_image(input_path: &Path, output_path: &Path) {
     let mut output_image = DynamicImage::new_rgba8(output_width, output_height);
 
     // 位置を高さの中心に揃えるためのオフセット計算
-    let y_offset = if target_height > output_height {
+    let y_offset = if resized_height > output_height {
         0 as i64
     } else {
-        ((output_height - target_height) / 2) as i64
+        ((output_height - resized_height) / 2) as i64
     };
 
     // リサイズされた画像をアウトプット画像に重ねる
@@ -101,6 +113,8 @@ fn main() {
     }
 
     fs::create_dir_all(output_dir).expect("Failed to create output directory");
+
+    println!("Image processing start.");
 
     process_directory(input_dir, output_dir);
 
